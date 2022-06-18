@@ -1,0 +1,51 @@
+Parameters:
+  S3POCLanding:
+    Type: String
+  S3POCSClean:
+    Type: String
+  S3POCCurated:
+    Type: String
+Resources:
+  GlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+                - redshift.amazonaws.com
+            Action: sts:AssumeRole
+      Description: poc-redshift-s3-access
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+      MaxSessionDuration: 43200
+      Path: /
+      RoleName: poc-redshift-s3-access
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3POCLanding}/*"
+                  - !Sub "arn:aws:s3:::${S3POCLanding}"
+                  - !Sub "arn:aws:s3:::${S3POCSClean}/*"
+                  - !Sub "arn:aws:s3:::${S3POCSClean}"
+                  - !Sub "arn:aws:s3:::${S3POCCurated}/*"
+                  - !Sub "arn:aws:s3:::${S3POCCurated}"
+          PolicyName: poc-redshift-s3-access
+
+Outputs:
+  GlueRole:
+    Description: IAM role for Glue Crawler
+    Value: !Ref GlueRole
+
+  GlueRoleArn:
+    Description: IAM role for Glue Job
+    Value: !GetAtt GlueRole.Arn

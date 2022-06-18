@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  Environment:
+    Description: Environment Name
+    Type: String
+  VpcName:
+    Type: String
+  RPrivateSubnet1:
+    Type: String
+  RPrivateSubnet2:
+    Type: String
+  VpcCIDR:
+    Description: VPC CIDR
+    Type: String
+    Default: 10.30.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+
+Outputs:
+  VPC:
+    Description: VPC
+    Value: !Ref VPC
+  VpcCIDR:
+    Description: VPC CIDR
+    Value: !Ref VpcCIDR
+  PrivateSubnets:
+    Description: Private Subnets
+    Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
+  PrivateSubnet1:
+    Description: Private Subnet AZ1
+    Value: !Ref PrivateSubnet1
+  PrivateRouteTableZone1:
+    Description: Second Route Table
+    Value: !Ref PrivateRouteTableZone1
+  PrivateSubnet2:
+    Description: Private Subnet AZ1
+    Value: !Ref PrivateSubnet2
+  PrivateRouteTableZone2:
+    Description: Second Route Table
+    Value: !Ref PrivateRouteTableZone2
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-${Environment}
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref RPrivateSubnet1
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-${Environment}-private-1
+
+  PrivateRouteTableZone1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-${Environment}-private-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref RPrivateSubnet2
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-${Environment}-private-2
+
+  PrivateRouteTableZone2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-${Environment}-private-2
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableZone1
+      SubnetId: !Ref PrivateSubnet1
+  
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableZone2
+      SubnetId: !Ref PrivateSubnet2

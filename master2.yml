@@ -1,0 +1,176 @@
+Parameters:
+  S3CFTBucketName:
+    Description: Enter the Cloud Formation template S3 Bucket name.
+    Type: String
+    Default: 'lake-house-poc-danvo'
+
+  S3CFTFolderName:
+    Description: S3 bucket folder name where the CFT is stored.
+    Type: String
+    Default: 'templates'
+
+  S3POCLanding:
+    Description: S3 bucket folder name where the Demo data is stored.
+    Type: String
+    Default: 'a-lakehousepoc-landing'
+
+  S3POCSClean:
+    Description: S3 bucket folder name where the Demo data is stored.
+    Type: String
+    Default: 'b-lakehousepoc-clean'
+
+  S3POCCurated:
+    Description: S3 bucket folder name where the Demo data is stored.
+    Type: String
+    Default: 'c-lakehousepoc-curated'
+
+  MasterUserPassword:
+    AllowedPattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?!.*[@/\"'']).*$'
+    ConstraintDescription: Must contain only alphanumeric characters.
+    Description: >-
+      The password associated with the admin user account for the Amazon
+      Redshift cluster that is being created.
+    MaxLength: '64'
+    MinLength: '8'
+    NoEcho: 'true'
+    Type: String
+
+  PocPrivateNetwork:
+    AllowedPattern: '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\/([0-9]{1,2})'
+    ConstraintDescription: Must contain an Network Address and a Subnet Mask
+    Description: >-
+      The VPC Private Network address where Redshift will be created. A /24 will be more than enough for the demo
+    Type: String
+
+  RedshiftSubnet1:
+    AllowedPattern: '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\/([0-9]{1,2})'
+    ConstraintDescription: Must contain an Network Address and a Subnet Mask and must have longer mask than PocPrivateNetwork
+    Description: >-
+      The first subnet of the subnet group
+    Type: String
+
+  RedshiftSubnet2:
+    AllowedPattern: '^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\/([0-9]{1,2})'
+    ConstraintDescription: Must contain an Network Address and a Subnet Mask and must have longer mask than PocPrivateNetwork
+    Description: >-
+      The second subnet of the subnet group
+    Type: String
+
+  CreateRedshift:
+    Description: Whether I should create Redshift cluster
+    Default: true
+    Type: String
+    AllowedValues: [ true, false ]
+
+Conditions:
+  ShouldCreateRedshift:
+    !Equals [ true, !Ref CreateRedshift ]
+
+Resources:
+
+  LandingS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+      - "-"
+      - - !Ref S3POCLanding
+        - !Select
+          - 0
+          - !Split
+            - "-"
+            - !Select
+              - 2
+              - !Split
+                - "/"
+                - !Ref "AWS::StackId"
+
+  CleanS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+      - "-"
+      - - !Ref S3POCSClean
+        - !Select
+          - 0
+          - !Split
+            - "-"
+            - !Select
+              - 2
+              - !Split
+                - "/"
+                - !Ref "AWS::StackId"
+
+  CuratedS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+      - "-"
+      - - !Ref S3POCCurated
+        - !Select
+          - 0
+          - !Split
+            - "-"
+            - !Select
+              - 2
+              - !Split
+                - "/"
+                - !Ref "AWS::StackId"
+
+  IAM:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${S3CFTBucketName}.s3.amazonaws.com/${S3CFTFolderName}/iam.yml"
+      Parameters:
+        S3POCLanding: !Ref LandingS3Bucket
+        S3POCSClean: !Ref CleanS3Bucket
+        S3POCCurated: !Ref CuratedS3Bucket
+
+  VPCVPN:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${S3CFTBucketName}.s3.amazonaws.com/${S3CFTFolderName}/vpcvpn.yml"
+      Parameters:
+        Environment: poc
+        VpcName: lakehouse
+        VpcCIDR: !Ref PocPrivateNetwork
+        RPrivateSubnet1: !Ref RedshiftSubnet1
+        RPrivateSubnet2: !Ref RedshiftSubnet2
+
+  Redshift:
+    Type: AWS::CloudFormation::Stack
+    Condition: ShouldCreateRedshift
+    Properties:
+      TemplateURL: !Sub "https://${S3CFTBucketName}.s3.amazonaws.com/${S3CFTFolderName}/redshift2.yml"
+      Parameters:
+        VPCID: !GetAtt VPCVPN.Outputs.VPC
+        ClusterSubnetIDA: !GetAtt VPCVPN.Outputs.PrivateSubnet1
+        ClusterSubnetIDB: !GetAtt VPCVPN.Outputs.PrivateSubnet2
+        MasterUsername: admin
+        MasterUserPassword: !Ref MasterUserPassword
+        NodeType: ra3.xlplus
+        NumberOfNodes: 2
+        DatabaseName: pocdb
+        IamRole: !GetAtt IAM.Outputs.GlueRoleArn
+
+Outputs:
+  S3Bucket1:
+    Description: S3 bucket
+    Value: !Ref LandingS3Bucket
+    Export:
+      Name: LandingS3Bucket
+  S3Bucket2:
+    Description: S3 bucket
+    Value: !Ref CleanS3Bucket
+    Export:
+      Name: CleanS3Bucket
+  S3Bucket3:
+    Description: S3 bucket
+    Value: !Ref CuratedS3Bucket
+    Export:
+      Name: CuratedS3Bucket
+  Redshift:
+    Description: Redshift Cluster
+    Condition: ShouldCreateRedshift
+    Value: !Ref Redshift
+    Export:
+      Name: Redshift
